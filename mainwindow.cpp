@@ -1,11 +1,23 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include "hardcmd.h"
+#include "quihelperdata.h"
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
+    iapinfo = { 0 };
+    iapinfo.isMainFinish = 1;
+    iapinfo.isExpFinish = 1;
+    connect(this, SIGNAL(getMainSch()), this, SLOT(getMainBoardIapSchedule()));
+    connect(this, SIGNAL(resetMain()), this, SLOT(resetMainBoardSystem()));
+    connect(this, SIGNAL(setMainIapData()), this, SLOT(setMainBoardIapData()));
+//    iapaction = new IapAction;
+//    iapaction->moveToThread(&iapThread);
 
     //实例化Socket对象并绑定网络信号槽
     socket = new QTcpSocket(this);
@@ -75,6 +87,58 @@ void MainWindow::error()
 
 void MainWindow::readData()
 {
+    QByteArray data = socket->readAll();
+    if (data.length() <= 0) {
+        return;
+    }
+
+    quint8 cmdid;
+    QByteArray cmdcontent;
+    if(HardCmd::parseBoardResponse(data, cmdid, cmdcontent))
+    {
+        if(EnumBoardId_setIAPFirmwareInfo == cmdid)
+        {
+            /*pMsg 内容：iapSumBytes(U32) + iapSumBlock(U16) + checkData(U8[8])*/
+            /*pReturnMsg 内容：bIsSucceed(U8)*/
+            iapinfo.isMainBoardIapInfoSet = cmdcontent[0];
+            if(iapinfo.isMainBoardIapInfoSet)
+                emit getMainSch();
+            else
+                qDebug() << "main iapinfo set Err";
+        }
+        else if(EnumBoardId_getIAPSchedule == cmdid)
+        {
+            /*pMsg 内容：空 */
+            /*pReturnMsg 内容：curBlock(U16)+ isFinsh(U8)*/
+            iapinfo.mainCurBlock = QUIHelperData::byteToUShort(cmdcontent.mid(0, 2));
+            iapinfo.isMainFinish = cmdcontent[2];
+            if(iapinfo.isMainFinish)
+            {
+                emit resetMain();
+            }
+            else
+            {
+                emit setMainIapData();
+            }
+        }
+        else if(EnumBoardId_setIAPFirmwareData == cmdid)
+        {
+            /*pMsg 内容：curBlock(U16) + lenght(U16) + curBlockCrc(U16) + iapDtat(U8[N])*/
+            /*pReturnMsg 内容：bIsSucceed(U8)*/
+            if(cmdcontent[0])
+            {
+                emit getMainSch();
+            }
+            else
+            {
+                qDebug() << "main iap block[%d] write Err" << iapinfo.mainCurBlock;
+            }
+        }
+    }
+    else
+    {
+        qDebug() << "board response parse Err";
+    }
 }
 
 
@@ -114,10 +178,12 @@ void MainWindow::on_btn_file_clicked()
             else
                 curblock->len = ZW_PACKET_MAX_BYTES;
             curblock->Data.append(binByteArray.sliced(i*ZW_PACKET_MAX_BYTES, curblock->len));
+            curblock->crcValue = QUIHelperData::getModbus16( (quint8*)curblock->Data.data(), curblock->len );
+
             binblocks->append(*curblock);
         }
+        iapinfo.byteNum = binSize;
         iapinfo.blockNum = binblocks->size();
-        iapinfo.curBlock = 0;
 
 
 
@@ -125,7 +191,7 @@ void MainWindow::on_btn_file_clicked()
         ui->textBrowser->insertPlainText("      ");
         ui->textBrowser->insertPlainText(QString::number(binSize));
         ui->textBrowser->insertPlainText(QStringLiteral("字节"));
-        ui->textBrowser->moveCursor(QTextCursor::End);//接收框始终定为在末尾一行
+        ui->textBrowser->moveCursor(QTextCursor::End);//接收框 始终定为在末尾一行
 //        ui->btn_menu->setEnabled(true);
 //        ui->btn_erase->setEnabled(true);
 //        ui->btn_update->setEnabled(true);
@@ -141,5 +207,44 @@ void MainWindow::on_btn_file_clicked()
 //        ui->btn_run->setDisabled(true);
 //        ui->btn_write->setDisabled(true);
     }
+}
+
+
+void MainWindow::on_btn_write_clicked()
+{
+    /*pMsg 内容：iapSumBytes(U32) + iapSumBlock(U16) + checkData(U8[8])(ignore)*/
+    /*pReturnMsg 内容：bIsSucceed(U8)*/
+    QByteArray pMsg;
+    pMsg.append( QUIHelperData::intToByte(iapinfo.byteNum) );
+    pMsg.append( QUIHelperData::ushortToByte(iapinfo.blockNum) );
+    socket->write(HardCmd::formatBoardCmd(EnumBoardId_setIAPFirmwareInfo, pMsg));
+}
+
+void MainWindow::getMainBoardIapSchedule()
+{
+    /*pMsg 内容：空 */
+    /*pReturnMsg 内容：curBlock(U16)+ isFinsh(U8)*/
+    QByteArray pMsg;
+    socket->write(HardCmd::formatBoardCmd(EnumBoardId_getIAPSchedule, pMsg));
+}
+
+void MainWindow::resetMainBoardSystem()
+{
+    /*pMsg 内容：checkData(U8[8])*/
+    /*pReturnMsg 内容：空 */
+    QByteArray pMsg(8, 0);
+    socket->write(HardCmd::formatBoardCmd(EnumBoardId_codeSystemReset, pMsg));
+}
+
+void MainWindow::setMainBoardIapData()
+{
+    /*pMsg 内容：curBlock(U16) + lenght(U16) + curBlockCrc(U16) + iapDtat(U8[N])*/
+    /*pReturnMsg 内容：bIsSucceed(U8)*/
+    QByteArray pMsg;
+    pMsg.append( QUIHelperData::ushortToByte( iapinfo.mainCurBlock ) );
+    pMsg.append( QUIHelperData::ushortToByte( binblocks->at(iapinfo.mainCurBlock).len ) );
+    pMsg.append( QUIHelperData::ushortToByteRec( binblocks->at(iapinfo.mainCurBlock).crcValue ) );
+    pMsg.append( binblocks->at(iapinfo.mainCurBlock).Data );
+    socket->write(HardCmd::formatBoardCmd(EnumBoardId_setIAPFirmwareData, pMsg));
 }
 
