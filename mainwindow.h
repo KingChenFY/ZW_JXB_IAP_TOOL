@@ -69,6 +69,8 @@ private slots:
     void setMainBoardIapData();
 
 
+    void on_btn_cleaar_clicked();
+
 signals:
     void getMainSch();
     void resetMain();

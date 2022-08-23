@@ -1,3 +1,9 @@
+/**************************************************************************************************
+ * Author:  ChenFeiyang
+ * Date:    2022-8-21
+ * SoftName:智微Morphogo固件升级平台
+ * Version: 202208231339
+ * ************************************************************************************************/
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
@@ -13,6 +19,7 @@ MainWindow::MainWindow(QWidget *parent)
     iapinfo = { 0 };
     iapinfo.isMainFinish = 1;
     iapinfo.isExpFinish = 1;
+    binblocks = new QList<binblock>;
     connect(this, SIGNAL(getMainSch()), this, SLOT(getMainBoardIapSchedule()));
     connect(this, SIGNAL(resetMain()), this, SLOT(resetMainBoardSystem()));
     connect(this, SIGNAL(setMainIapData()), this, SLOT(setMainBoardIapData()));
@@ -37,6 +44,9 @@ MainWindow::MainWindow(QWidget *parent)
     ui->combo_ip->addItem("192.168.3.61");
     ui->combo_port->addItem("8888");
     ui->statusBar->showMessage(QStringLiteral("就绪"), 1000);
+    ui->btn_write->setDisabled(true);
+    ui->btn_write_2->setDisabled(true);
+    ui->progressBar->setTextVisible(false);
 }
 
 MainWindow::~MainWindow()
@@ -78,6 +88,9 @@ void MainWindow::disconnected()
 {
     net_status = false;
     ui->btn_net->setText("连接主板");
+
+    ui->progressBar->setValue(0);
+    ui->progressBar->setTextVisible(false);
 }
 
 void MainWindow::error()
@@ -102,9 +115,17 @@ void MainWindow::readData()
             /*pReturnMsg 内容：bIsSucceed(U8)*/
             iapinfo.isMainBoardIapInfoSet = cmdcontent[0];
             if(iapinfo.isMainBoardIapInfoSet)
+            {
+                ui->statusBar->showMessage(QStringLiteral("正在更新......"), 1000);
+                ui->progressBar->setTextVisible(true);
+                ui->progressBar->setValue(0);
                 emit getMainSch();
+            }
             else
+            {
                 qDebug() << "main iapinfo set Err";
+                QMessageBox::critical(this, tr("Main IAP"), tr("set iapinfo Err!"));
+            }
         }
         else if(EnumBoardId_getIAPSchedule == cmdid)
         {
@@ -114,10 +135,13 @@ void MainWindow::readData()
             iapinfo.isMainFinish = cmdcontent[2];
             if(iapinfo.isMainFinish)
             {
+                ui->progressBar->setValue(100);
                 emit resetMain();
             }
             else
             {
+                quint8 progress = iapinfo.mainCurBlock*100/iapinfo.blockNum;
+                ui->progressBar->setValue(progress);
                 emit setMainIapData();
             }
         }
@@ -132,6 +156,7 @@ void MainWindow::readData()
             else
             {
                 qDebug() << "main iap block[%d] write Err" << iapinfo.mainCurBlock;
+                QMessageBox::critical(this, tr("Main IAP"), tr("Update Fail, Block[%d] write Err!"));
             }
         }
     }
@@ -168,7 +193,8 @@ void MainWindow::on_btn_file_clicked()
 
         quint16 blocknum = (binSize + ZW_PACKET_MAX_BYTES - 1) / ZW_PACKET_MAX_BYTES;
         quint16 remainbytes = binSize % ZW_PACKET_MAX_BYTES;
-        binblocks = new QList<binblock>;
+
+        binblocks->clear();
         for(quint16 i =0; i < blocknum; i++)
         {
             binblock* curblock = new binblock;
@@ -181,31 +207,19 @@ void MainWindow::on_btn_file_clicked()
             curblock->crcValue = QUIHelperData::getModbus16( (quint8*)curblock->Data.data(), curblock->len );
 
             binblocks->append(*curblock);
+            delete curblock;
         }
         iapinfo.byteNum = binSize;
         iapinfo.blockNum = binblocks->size();
 
-
-
-        ui->textBrowser->insertPlainText(binInfo.fileName());
-        ui->textBrowser->insertPlainText("      ");
-        ui->textBrowser->insertPlainText(QString::number(binSize));
-        ui->textBrowser->insertPlainText(QStringLiteral("字节"));
-        ui->textBrowser->moveCursor(QTextCursor::End);//接收框 始终定为在末尾一行
-//        ui->btn_menu->setEnabled(true);
-//        ui->btn_erase->setEnabled(true);
-//        ui->btn_update->setEnabled(true);
-//        ui->btn_run->setEnabled(true);
-//        ui->btn_write->setEnabled(true);
-//        ui->btn_copy->setEnabled(true);
+        ui->textBrowser->insertPlainText(tr("%1\t%2字节\n").arg(binInfo.fileName()).arg(QString::number(binSize)));
+        ui->btn_write->setEnabled(true);
+        ui->btn_write_2->setEnabled(true);
     }
     else
     {
-//        ui->btn_menu->setDisabled(true);
-//        ui->btn_erase->setDisabled(true);
-//        ui->btn_update->setDisabled(true);
-//        ui->btn_run->setDisabled(true);
-//        ui->btn_write->setDisabled(true);
+        ui->btn_write->setDisabled(true);
+        ui->btn_write_2->setDisabled(true);
     }
 }
 
@@ -214,10 +228,16 @@ void MainWindow::on_btn_write_clicked()
 {
     /*pMsg 内容：iapSumBytes(U32) + iapSumBlock(U16) + checkData(U8[8])(ignore)*/
     /*pReturnMsg 内容：bIsSucceed(U8)*/
+    if(!net_status)
+    {
+        QMessageBox::information(this, tr("开始更新主板"), tr("主板未连接！"));
+        return;
+    }
     QByteArray pMsg;
     pMsg.append( QUIHelperData::intToByte(iapinfo.byteNum) );
     pMsg.append( QUIHelperData::ushortToByte(iapinfo.blockNum) );
     iapinfo.isMainBoardIapInfoSet = 0;
+    ui->statusBar->showMessage(QStringLiteral("正在写入更新信息......"), 0);
     socket->write(HardCmd::formatBoardCmd(EnumBoardId_setIAPFirmwareInfo, pMsg));
 }
 
@@ -231,6 +251,7 @@ void MainWindow::getMainBoardIapSchedule()
 
 void MainWindow::resetMainBoardSystem()
 {
+    ui->statusBar->showMessage(QStringLiteral("正在重启主板......"), 1000);
     /*pMsg 内容：checkData(U8[8])*/
     /*pReturnMsg 内容：空 */
     QByteArray pMsg(8, 0);
@@ -247,5 +268,11 @@ void MainWindow::setMainBoardIapData()
     pMsg.append( QUIHelperData::ushortToByteRec( binblocks->at(iapinfo.mainCurBlock).crcValue ) );
     pMsg.append( binblocks->at(iapinfo.mainCurBlock).Data );
     socket->write(HardCmd::formatBoardCmd(EnumBoardId_setIAPFirmwareData, pMsg));
+}
+
+
+void MainWindow::on_btn_cleaar_clicked()
+{
+    ui->textBrowser->clear();
 }
 

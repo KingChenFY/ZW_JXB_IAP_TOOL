@@ -14,7 +14,7 @@
    <string>MainWindow</string>
   </property>
   <property name="windowIcon">
-   <iconset resource="../CodeTest/stm32_iap/Qt_BMS_485IAP_V2/qwe.qrc">
+   <iconset resource="qwe.qrc">
     <normaloff>:/src/write2file.png</normaloff>:/src/write2file.png</iconset>
   </property>
   <widget class="QWidget" name="centralWidget">
@@ -125,45 +125,17 @@
        <string>功能按键</string>
       </property>
       <layout class="QGridLayout" name="gridLayout_3">
-       <item row="2" column="0">
+       <item row="0" column="1">
         <widget class="QPushButton" name="btn_write_2">
          <property name="text">
-          <string>写升级信息</string>
+          <string>开始更新副板</string>
          </property>
         </widget>
        </item>
-       <item row="2" column="1">
-        <widget class="QPushButton" name="btn_update_2">
-         <property name="text">
-          <string>升级程序</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="0">
+       <item row="0" column="0">
         <widget class="QPushButton" name="btn_write">
          <property name="text">
-          <string>写升级信息</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="1">
-        <widget class="QPushButton" name="btn_update">
-         <property name="text">
-          <string>升级程序</string>
-         </property>
-        </widget>
-       </item>
-       <item row="2" column="3">
-        <widget class="QPushButton" name="btn_reset_2">
-         <property name="text">
-          <string>重启硬件</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="3">
-        <widget class="QPushButton" name="btn_reset">
-         <property name="text">
-          <string>重启硬件</string>
+          <string>开始更新主板</string>
          </property>
         </widget>
        </item>
@@ -196,6 +168,8 @@
   <widget class="QStatusBar" name="statusBar"/>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
- <resources/>
+ <resources>
+  <include location="qwe.qrc"/>
+ </resources>
  <connections/>
 </ui>
