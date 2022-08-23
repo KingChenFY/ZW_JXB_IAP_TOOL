@@ -217,6 +217,7 @@ void MainWindow::on_btn_write_clicked()
     QByteArray pMsg;
     pMsg.append( QUIHelperData::intToByte(iapinfo.byteNum) );
     pMsg.append( QUIHelperData::ushortToByte(iapinfo.blockNum) );
+    iapinfo.isMainBoardIapInfoSet = 0;
     socket->write(HardCmd::formatBoardCmd(EnumBoardId_setIAPFirmwareInfo, pMsg));
 }
 
