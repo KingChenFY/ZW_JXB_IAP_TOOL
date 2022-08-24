@@ -29,6 +29,8 @@ typedef struct
     uint32_t byteNum;
     uint16_t blockNum;
     uint8_t isMainBoardIapInfoSet;
+    uint8_t isExpBoardIapInfoSet;
+    uint8_t isExpCurBlockDataSet;
     uint16_t mainCurBlock;
     uint16_t expCurBlock;
     uint8_t isMainFinish;
@@ -64,17 +66,25 @@ private slots:
     void on_btn_net_clicked();
     void on_btn_file_clicked();
     void on_btn_write_clicked();
+    void on_btn_cleaar_clicked();
+    void on_btn_write_2_clicked();
+
     void getMainBoardIapSchedule();
     void resetMainBoardSystem();
     void setMainBoardIapData();
 
-
-    void on_btn_cleaar_clicked();
+    void synExpBoardIapSchedule();
+    void resetExpBoardSystem();
+    void setExpBoardIapData();
 
 signals:
     void getMainSch();
     void resetMain();
     void setMainIapData();
+
+    void synExpSch();
+    void resetExp();
+    void setExpIapData();
 };
 
 #endif // MAINWINDOW_H

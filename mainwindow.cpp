@@ -9,6 +9,7 @@
 
 #include "hardcmd.h"
 #include "quihelperdata.h"
+#include <winsock.h>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -23,6 +24,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(this, SIGNAL(getMainSch()), this, SLOT(getMainBoardIapSchedule()));
     connect(this, SIGNAL(resetMain()), this, SLOT(resetMainBoardSystem()));
     connect(this, SIGNAL(setMainIapData()), this, SLOT(setMainBoardIapData()));
+    connect(this, SIGNAL(synExpSch()), this, SLOT(synExpBoardIapSchedule()));
+    connect(this, SIGNAL(resetExp()), this, SLOT(resetExpBoardSystem()));
+    connect(this, SIGNAL(setExpIapData()), this, SLOT(setExpBoardIapData()));
 //    iapaction = new IapAction;
 //    iapaction->moveToThread(&iapThread);
 
@@ -125,6 +129,7 @@ void MainWindow::readData()
             {
                 qDebug() << "main iapinfo set Err";
                 QMessageBox::critical(this, tr("Main IAP"), tr("set iapinfo Err!"));
+                return;
             }
         }
         else if(EnumBoardId_getIAPSchedule == cmdid)
@@ -157,6 +162,84 @@ void MainWindow::readData()
             {
                 qDebug() << "main iap block[%d] write Err" << iapinfo.mainCurBlock;
                 QMessageBox::critical(this, tr("Main IAP"), tr("Update Fail, Block[%d] write Err!"));
+                return;
+            }
+        }
+        else if(EnumBoardId_setExpIAPFirmwareInfo == cmdid)
+        {
+            /*pMsg 内容：iapSumBytes(U32) + iapSumBlock(U16) + checkData(U8[8])(ignore)*/
+            /*pReturnMsg 内容：bIsExpBoard_Receive(U8)*/
+            if(cmdcontent[0])
+            {
+                emit synExpSch();
+            }
+            else
+            {
+                qDebug() << "main not send iapinfo to Exp" << iapinfo.mainCurBlock;
+                QMessageBox::critical(this, tr("Exp IAP"), tr("Main not send iapinfo to Exp!"));
+                return;
+            }
+        }
+        else if(EnumBoardId_getExpIAPSchedule == cmdid)
+        {
+            /*pMsg 内容：空 */
+            /*pReturnMsg 内容：m_exp_curBlock(U16)+ g_isExpIapInfoSet(U8)+ g_isCurBlockDataSet(U8)+ m_exp_isFinsh(U8)*/
+            iapinfo.expCurBlock = QUIHelperData::byteToUShort(cmdcontent.mid(0, 2));
+            iapinfo.isExpBoardIapInfoSet = cmdcontent[2];
+            iapinfo.isExpCurBlockDataSet = cmdcontent[3];
+            iapinfo.isExpFinish = cmdcontent[4];
+
+            if(2 == iapinfo.isExpBoardIapInfoSet)
+            {
+                qDebug() << "exp set iapinfo Err";
+                QMessageBox::critical(this, tr("Exp IAP"), tr("Exp set iapinfo Err!"));
+                return;
+            }
+            else if(0 == iapinfo.isExpBoardIapInfoSet)
+            {//继续同步
+                emit synExpSch();
+            }
+            else
+            {
+                if(2 == iapinfo.isExpCurBlockDataSet)
+                {
+                    qDebug() << "exp write iapdata Err";
+                    QMessageBox::critical(this, tr("Exp IAP"), tr("Exp write iapdata Err!"));
+                    return;
+                }
+                else if(0 == iapinfo.isExpCurBlockDataSet)
+                {
+                    emit synExpSch();
+                }
+                else
+                {
+                    if( (iapinfo.isExpFinish) || (iapinfo.expCurBlock == iapinfo.blockNum) )
+                    {
+                        qDebug() << "exp iap finish";
+                        emit resetExp();
+                    }
+                    else
+                    {
+                        qDebug() << "pc send exp iapdata,block[%d]" <<iapinfo.expCurBlock;
+                        emit setExpIapData();
+                    }
+                }
+            }
+        }
+        else if(EnumBoardId_setExpIAPFirmwareData == cmdid)
+        {
+            /*pMsg 内容：curBlock(U16) + lenght(U16) + curBlockCrc(U16) + iapDtat(U8[N])*/
+            /*pReturnMsg 内容：bIsSucceed(U8)*/
+            if(cmdcontent[0])
+            {
+                qDebug() << "syn exp iapdata write status[%d]" << iapinfo.expCurBlock;
+                emit synExpSch();
+            }
+            else
+            {
+                qDebug() << "main not send iapdata to Exp" << iapinfo.mainCurBlock;
+                QMessageBox::critical(this, tr("Exp IAP"), tr("Main not send iapdata to Exp!"));
+                return;
             }
         }
     }
@@ -212,7 +295,7 @@ void MainWindow::on_btn_file_clicked()
         iapinfo.byteNum = binSize;
         iapinfo.blockNum = binblocks->size();
 
-        ui->textBrowser->insertPlainText(tr("%1\t%2字节\n").arg(binInfo.fileName()).arg(QString::number(binSize)));
+        ui->textBrowser->insertPlainText( tr("%1\t%2字节\n").arg( binInfo.fileName(), QString::number(binSize) ) );
         ui->btn_write->setEnabled(true);
         ui->btn_write_2->setEnabled(true);
     }
@@ -274,5 +357,51 @@ void MainWindow::setMainBoardIapData()
 void MainWindow::on_btn_cleaar_clicked()
 {
     ui->textBrowser->clear();
+}
+
+
+void MainWindow::on_btn_write_2_clicked()
+{
+    /*pMsg 内容：iapSumBytes(U32) + iapSumBlock(U16) + checkData(U8[8])(ignore)*/
+    /*pReturnMsg 内容：bIsSucceed(U8)*/
+    if(!net_status)
+    {
+        QMessageBox::information(this, tr("开始更新副板"), tr("主板未连接！"));
+        return;
+    }
+    QByteArray pMsg;
+    pMsg.append( QUIHelperData::intToByte(iapinfo.byteNum) );
+    pMsg.append( QUIHelperData::ushortToByte(iapinfo.blockNum) );
+    ui->statusBar->showMessage(QStringLiteral("正在写入更新信息......"), 0);
+    socket->write(HardCmd::formatBoardCmd(EnumBoardId_setExpIAPFirmwareInfo, pMsg));
+}
+
+void MainWindow::synExpBoardIapSchedule()
+{
+    /*pMsg 内容：空 */
+    /*pReturnMsg 内容：m_exp_curBlock(U16)+ m_exp_isFinsh(U8)+ g_isExpIapInfoSet(U8)+ g_isExpReadyWrite(U8)*/
+    QByteArray pMsg;
+    socket->write(HardCmd::formatBoardCmd(EnumBoardId_getExpIAPSchedule, pMsg));
+}
+
+void MainWindow::resetExpBoardSystem()
+{
+    ui->statusBar->showMessage(QStringLiteral("正在重启副板......"), 1000);
+    /*pMsg 内容：checkData(U8[8])*/
+    /*pReturnMsg 内容：空 */
+    QByteArray pMsg(8, 0);
+    socket->write(HardCmd::formatBoardCmd(EnumBoardId_ExpcodeSystemReset, pMsg));
+}
+
+void MainWindow::setExpBoardIapData()
+{
+    /*pMsg 内容：curBlock(U16) + lenght(U16) + curBlockCrc(U16) + iapDtat(U8[N])*/
+    /*pReturnMsg 内容：bIsSucceed(U8)*/
+    QByteArray pMsg;
+    pMsg.append( QUIHelperData::ushortToByte( iapinfo.expCurBlock ) );
+    pMsg.append( QUIHelperData::ushortToByte( binblocks->at(iapinfo.expCurBlock).len ) );
+    pMsg.append( QUIHelperData::ushortToByteRec( binblocks->at(iapinfo.expCurBlock).crcValue ) );
+    pMsg.append( binblocks->at(iapinfo.expCurBlock).Data );
+    socket->write(HardCmd::formatBoardCmd(EnumBoardId_setExpIAPFirmwareData, pMsg));
 }
 
