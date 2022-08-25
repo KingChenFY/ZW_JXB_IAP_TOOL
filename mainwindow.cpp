@@ -120,7 +120,6 @@ void MainWindow::readData()
             iapinfo.isMainBoardIapInfoSet = cmdcontent[0];
             if(iapinfo.isMainBoardIapInfoSet)
             {
-                ui->statusBar->showMessage(QStringLiteral("正在更新......"), 1000);
                 ui->progressBar->setTextVisible(true);
                 ui->progressBar->setValue(0);
                 emit getMainSch();
@@ -160,7 +159,7 @@ void MainWindow::readData()
             }
             else
             {
-                qDebug() << "main iap block[%d] write Err" << iapinfo.mainCurBlock;
+                qDebug() << "main iap block[%d] write Err";
                 QMessageBox::critical(this, tr("Main IAP"), tr("Update Fail, Block[%d] write Err!"));
                 return;
             }
@@ -171,11 +170,13 @@ void MainWindow::readData()
             /*pReturnMsg 内容：bIsExpBoard_Receive(U8)*/
             if(cmdcontent[0])
             {
+                ui->progressBar->setTextVisible(true);
+                ui->progressBar->setValue(0);
                 emit synExpSch();
             }
             else
             {
-                qDebug() << "main not send iapinfo to Exp" << iapinfo.mainCurBlock;
+                qDebug() << "main not send iapinfo to Exp";
                 QMessageBox::critical(this, tr("Exp IAP"), tr("Main not send iapinfo to Exp!"));
                 return;
             }
@@ -215,11 +216,14 @@ void MainWindow::readData()
                 {
                     if( (iapinfo.isExpFinish) || (iapinfo.expCurBlock == iapinfo.blockNum) )
                     {
+                        ui->progressBar->setValue(100);
                         qDebug() << "exp iap finish";
                         emit resetExp();
                     }
                     else
                     {
+                        quint8 progress = iapinfo.expCurBlock*100/iapinfo.blockNum;
+                        ui->progressBar->setValue(progress);
                         qDebug() << "pc send exp iapdata,block[%d]" <<iapinfo.expCurBlock;
                         emit setExpIapData();
                     }
@@ -316,11 +320,16 @@ void MainWindow::on_btn_write_clicked()
         QMessageBox::information(this, tr("开始更新主板"), tr("主板未连接！"));
         return;
     }
+    if(binblocks->at(iapinfo.mainCurBlock).Data[28] != 0x01)
+    {
+        QMessageBox::information(this, tr("开始更新主板"), tr("升级包与烧写对象不匹配！"));
+        return;
+    }
     QByteArray pMsg;
     pMsg.append( QUIHelperData::intToByte(iapinfo.byteNum) );
     pMsg.append( QUIHelperData::ushortToByte(iapinfo.blockNum) );
     iapinfo.isMainBoardIapInfoSet = 0;
-    ui->statusBar->showMessage(QStringLiteral("正在写入更新信息......"), 0);
+    ui->statusBar->showMessage(QStringLiteral("正在写入更新信息......"), 1000);
     socket->write(HardCmd::formatBoardCmd(EnumBoardId_setIAPFirmwareInfo, pMsg));
 }
 
@@ -369,10 +378,15 @@ void MainWindow::on_btn_write_2_clicked()
         QMessageBox::information(this, tr("开始更新副板"), tr("主板未连接！"));
         return;
     }
+    if(binblocks->at(iapinfo.mainCurBlock).Data[28] != 0x02)
+    {
+        QMessageBox::information(this, tr("开始更新副板"), tr("升级包与烧写对象不匹配！"));
+        return;
+    }
     QByteArray pMsg;
     pMsg.append( QUIHelperData::intToByte(iapinfo.byteNum) );
     pMsg.append( QUIHelperData::ushortToByte(iapinfo.blockNum) );
-    ui->statusBar->showMessage(QStringLiteral("正在写入更新信息......"), 0);
+    ui->statusBar->showMessage(QStringLiteral("正在写入更新信息......"), 1000);
     socket->write(HardCmd::formatBoardCmd(EnumBoardId_setExpIAPFirmwareInfo, pMsg));
 }
 
