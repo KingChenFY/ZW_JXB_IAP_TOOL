@@ -320,7 +320,7 @@ void MainWindow::on_btn_write_clicked()
         QMessageBox::information(this, tr("开始更新主板"), tr("主板未连接！"));
         return;
     }
-    if(binblocks->at(iapinfo.mainCurBlock).Data[28] != 0x01)
+    if(binblocks->at(0).Data[28] != 0x01)
     {
         QMessageBox::information(this, tr("开始更新主板"), tr("升级包与烧写对象不匹配！"));
         return;
@@ -378,7 +378,7 @@ void MainWindow::on_btn_write_2_clicked()
         QMessageBox::information(this, tr("开始更新副板"), tr("主板未连接！"));
         return;
     }
-    if(binblocks->at(iapinfo.mainCurBlock).Data[28] != 0x02)
+    if(binblocks->at(0).Data[28] != 0x02)
     {
         QMessageBox::information(this, tr("开始更新副板"), tr("升级包与烧写对象不匹配！"));
         return;

@@ -7,6 +7,7 @@ greaterThan(QT_MAJOR_VERSION, 5): QT += core5compat
 
 CONFIG += c++17
 CONFIG += warn_off
+CONFIG += resources_big
 
 # You can make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.
@@ -38,3 +39,5 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 RESOURCES += \
     qwe.qrc
+
+RC_ICONS = title.ico
